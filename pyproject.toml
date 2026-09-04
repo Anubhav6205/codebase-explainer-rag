@@ -1,0 +1,13 @@
+[project]
+name="capstone_1"
+version="1.0.0"
+description="Search for anything around the codebase"
+authors=[{name="Anubhav", email="anubhavgupta@test.com"}]
+dependencies= [
+"qdrant-client",
+"python-dotenv"]
+
+
+
+[tool.setuptools]
+packages = []

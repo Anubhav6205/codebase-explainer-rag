@@ -1,0 +1,29 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: dockerfile
+    container_name: capstone-1
+    restart: unless-stopped
+
+
+
+    ports:
+      - "8000:8000"
+
+    env_file:
+      - .env
+
+  qdrant: 
+    image: qdrant/qdrant
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+
+volumes:
+  qdrant_data:
