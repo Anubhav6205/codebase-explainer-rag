@@ -5,7 +5,10 @@ description="Search for anything around the codebase"
 authors=[{name="Anubhav", email="anubhavgupta@test.com"}]
 dependencies= [
 "qdrant-client",
-"python-dotenv"]
+"voyageai",
+"llama-index-core",
+    "tree-sitter",
+    "tree-sitter-language-pack"]
 
 
 
