@@ -296,6 +296,60 @@ it toolless is what makes it a real check.
 stops. Here the agent can look at what it has, notice a gap, and go back for more. That
 loop is what makes "agentic" an honest description rather than a resume word.
 
+### Finalised node structure
+
+**1. `decompose` — the only node that plans**
+- Reads: original question, `human_feedback` (if any), prior hop's evidence, hop counter
+- **Hop 1:** scans the question for unfamiliar/domain-specific terms (absorbs the old `domain_identifier` job — no separate node). If terms are unfamiliar, round-1 sub-questions ARE literal term lookups, not real decomposition
+- **Hop 2+:** now grounded in vocabulary, decomposes for real into an enumerated checklist of what must be found. Relational questions get the fixed 6-point checklist (what is A, what is B, where they touch, direction/cardinality, where enforced, what on violation)
+- **On HITL feedback:** folds human guidance into the next checklist as additional/corrected search targets
+- Holds no tool. Emits queries only — never retrieves
+
+**2. `searcher` — pure executor, zero judgment**
+- Sole holder of `search_tool` (hybrid: dense `voyage-code-3` + BM25 sparse → RRF fusion → Voyage `rerank-2.5` → top ~5)
+- Runs whatever `decompose` handed it. Makes no decision about what to search or when to stop
+- This is why it's a node, not an agent — no judgment lives here
+
+**3. `coverage_check` — relevance gate, pre-synthesis**
+- Maps retrieved evidence against `decompose`'s checklist, item by item
+- Output is only `sufficient` / `insufficient`. Nothing about hop counts, nothing about citations
+- Sufficiency is arithmetic coverage of the checklist, not an LLM opinion on "is this enough?" — that's the fix for model over-agreement
+
+**4. Hop-cap check — plain Python conditional edge, not an LLM**
+- Reads verdict + hop counter together
+- `sufficient` → `response`
+- `insufficient` + hops remain → `decompose` (counter++)
+- `insufficient` + cap hit → `response`, flagged `exhausted`
+- Being code, not a prompt, is what actually kills the infinite-loop risk
+
+**5. `response` — synthesis or refusal**
+- `sufficient` → cited answer, forwards to `citation_check`
+- `exhausted` → explicit abstention → *Not covered*, skips `citation_check` entirely (nothing to verify in a refusal)
+
+**6. `citation_check` — faithfulness gate, post-synthesis, toolless**
+- Verifies each claim actually appears in the chunk it cites — distinct from `coverage_check`'s relevance job
+- Fail once → back to `response` only (evidence was fine, synthesis wasn't), one bounded retry
+- Fail twice → *Not covered*, tagged `citation_verification_failed` — a different signal from evidence-exhausted, so eval can separate the two failure modes
+
+**7. HITL — blocking gate**
+- Entered after `citation_check` passes, or after an exhausted abstention (human can challenge a wrong "Not covered")
+- **Approve** → END
+- **Reject, no feedback** → terminal, tagged `rejected_no_feedback` — no loop, there's no new signal to act on
+- **Reject + feedback** → `decompose`, feedback injected into state
+- Bypassed in eval/CI mode — no human present, so it auto-approves or the run never terminates
+
+### State fields that make it work
+- `hop_count` + `hop_cap` — automatic loop bound
+- `human_retry_count` + cap of 1–2 — separate counter, else a rejected already-exhausted answer loops straight back to exhausted
+- `human_feedback` — read by `decompose`, cleared after use
+- `checklist` + `coverage_map` — what makes false-confidence rate measurable in Step 11
+- `termination_reason` — `approved` / `exhausted` / `citation_verification_failed` / `rejected_no_feedback`
+
+### Loop edges — exactly three, all bounded
+- `coverage_check` → `decompose` (hop cap)
+- `citation_check` → `response` (1 retry)
+- HITL → `decompose` (human cap)
+
 ---
 
 ## 4. Time budget
