@@ -9,16 +9,24 @@ from state import MessageState
 
 
 class Citation(BaseModel):
-    claim: str = Field(description="A single factual claim from the answer, quoted or paraphrased verbatim")
-    chunk_ids: list[str] = Field(description="Chunk ids that literally support this claim")
+    claim: str = Field(
+        description="A single factual claim from the answer, quoted or paraphrased verbatim"
+    )
+    chunk_ids: list[str] = Field(
+        description="Chunk ids that literally support this claim"
+    )
 
 
 class ResponseOutput(BaseModel):
-    answer: str = Field(description="The final answer to the user's question, written as clean short bullet points")
-    citations: list[Citation] = Field(description="One entry per factual claim in the answer, tagged with the chunk ids that support it")
+    answer: str = Field(
+        description="The final answer to the user's question, written as clean short bullet points"
+    )
+    citations: list[Citation] = Field(
+        description="One entry per factual claim in the answer, tagged with the chunk ids that support it"
+    )
 
 
-response_model = init_chat_model("gpt-5-mini").with_structured_output(ResponseOutput)
+response_model = init_chat_model("gpt-4.1-mini").with_structured_output(ResponseOutput)
 
 
 RESPONSE_SYS = SystemMessage(content="""\
@@ -97,9 +105,11 @@ def _format_coverage_map(coverage_map):
 def response_agent(state: MessageState) -> dict:
     is_sufficient = state.get("is_sufficient", False)
     hop_count = state.get("hop_count", 0)
+    print(f"[response] ENTER hop={hop_count} is_sufficient={is_sufficient}")
 
     # Exhausted branch — router sent us here after hop cap with is_sufficient=False
     if not is_sufficient:
+        print(f"[response] EXIT abstain (termination_reason=exhausted)")
         return {
             "answer": "This question cannot be answered from this repository.",
             "citations": [],
@@ -111,19 +121,38 @@ def response_agent(state: MessageState) -> dict:
     checklist = state.get("checklist", []) or []
     coverage_map = state.get("coverage_map", {}) or {}
     retrieved_chunks = state.get("retrieved_chunks", []) or []
+    print(
+        f"[response] transform inputs -> context | before: checklist(len={len(checklist)}) coverage_map({len(coverage_map)} keys) chunks(len={len(retrieved_chunks)})"
+    )
+
+    checklist_str = _format_checklist(checklist)
+    coverage_str = _format_coverage_map(coverage_map)
+    chunks_str = _format_chunks(retrieved_chunks)
+    print(
+        f"[response] transform lists/dicts -> strs | after: checklist_str(len={len(checklist_str)}) coverage_str(len={len(coverage_str)}) chunks_str(len={len(chunks_str)})"
+    )
 
     context = (
         f"Original question:\n{question}\n\n"
-        f"Checklist (answer plan):\n{_format_checklist(checklist)}\n\n"
-        f"Coverage map (item -> chunk ids that cover it):\n{_format_coverage_map(coverage_map)}\n\n"
-        f"Retrieved chunk pool (full text):\n{_format_chunks(retrieved_chunks)}"
+        f"Checklist (answer plan):\n{checklist_str}\n\n"
+        f"Coverage map (item -> chunk ids that cover it):\n{coverage_str}\n\n"
+        f"Retrieved chunk pool (full text):\n{chunks_str}"
     )
 
-    result = response_model.invoke(
-        [RESPONSE_SYS, HumanMessage(content=context)]
+    print(f"[response] invoking LLM")
+    result = response_model.invoke([RESPONSE_SYS, HumanMessage(content=context)])
+
+    citations_dumped = [c.model_dump() for c in result.citations]
+    print(
+        f"[response] transform Citation(BaseModel) -> dict | before: {len(result.citations)} Citation objects (sample: claim={result.citations[0].claim[:60]!r}... chunk_ids={result.citations[0].chunk_ids}) | after: {len(citations_dumped)} dicts"
+        if result.citations
+        else f"[response] transform Citation(BaseModel) -> dict | before: 0 Citation objects | after: 0 dicts"
+    )
+    print(
+        f"[response] EXIT answer_len={len(result.answer)} citations={len(citations_dumped)}"
     )
 
     return {
         "answer": result.answer,
-        "citations": [c.model_dump() for c in result.citations],
+        "citations": citations_dumped,
     }

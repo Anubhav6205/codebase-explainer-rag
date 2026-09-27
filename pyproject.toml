@@ -8,6 +8,11 @@ dependencies= [
 "voyageai",
 "llama-index-core",
 "fastembed",
+ "langchain".
+ "langchain_openai",
+ "langgraph"
+ "arize-phoenix","arize-phoenix-otel","openinference-instrumentation-langchain",
+
 "sentence-transformers",
     "tree-sitter",
     "tree-sitter-language-pack"]

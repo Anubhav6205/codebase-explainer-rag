@@ -38,7 +38,8 @@ print("ts files:",ts_files)
 
 for index,ts_file in enumerate(ts_files):
     text = ts_file.read_text(encoding="utf-8")
-    nodes = code_splitter.get_nodes_from_documents([Document(text=text)])
+    rel_path = str(ts_file.relative_to(backstage_dir)).replace("\\", "/")
+    nodes = code_splitter.get_nodes_from_documents([Document(text=text, metadata={"source_file": rel_path})])
     code_documents.extend(nodes)
     print("Chunks:",index,nodes)
 

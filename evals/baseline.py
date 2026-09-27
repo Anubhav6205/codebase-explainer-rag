@@ -16,7 +16,7 @@ from datasets import Dataset
 from ragas import evaluate
 from ragas.metrics import context_precision, context_recall
 from langchain_openai import ChatOpenAI
-
+from graph.graph import app
 with open("golden.json", "r") as file:
     golden_data = json.load(file)
 
@@ -35,12 +35,18 @@ if __name__ == "__main__":
     all_retrieved_contexts = []
 
     for data in filtered_golden_data:
-        user_input = data["question"]
+        question = data["question"]
         reference = data["answer"]
-        reranked = retrieve_reranked(user_input)
-        contexts = [item[1]["payload"]["text"] for item in reranked]
+        # reranked = retrieve_reranked(user_input)
+        thread_id = str(uuid.uuid4())
+        result = app.invoke({"question":question},config=
+        {"configurable":{"thread_id":thread_id}})
+        termination_reason = result.get("termination_reason")
+        answer = result.get("answer", "")
+        retrieved_chunks = result.get("retrieved_chunks", [])
+        contexts = [c["text"] for c in retrieved_chunks]
 
-        user_inputs.append(user_input)
+        user_inputs.append(question)
         references.append(reference)
         all_retrieved_contexts.append(contexts)
 

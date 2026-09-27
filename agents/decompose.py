@@ -17,7 +17,7 @@ class DecomposeOutput(BaseModel):
     )
 
 
-decompose_model = init_chat_model("gpt-5-mini").with_structured_output(DecomposeOutput)
+decompose_model = init_chat_model("gpt-4.1-mini").with_structured_output(DecomposeOutput)
 
 
 DECOMPOSE_DOMAIN_TERM_SYS = SystemMessage(content="""\
@@ -108,6 +108,9 @@ arithmetically against the checklist you produce here.
 
 def decompose_agent(state: MessageState):
     is_grounding_hop = state.get("hop_count", 0) == 0
+    hop_count_in = state.get("hop_count", 0)
+    print(f"[decompose] ENTER hop={hop_count_in} is_grounding={is_grounding_hop}")
+
     sys_prompt = (
         DECOMPOSE_DOMAIN_TERM_SYS if is_grounding_hop else DECOMPOSE_USER_QUERY_SYS
     )
@@ -116,7 +119,11 @@ def decompose_agent(state: MessageState):
 
     if is_grounding_hop:
         message = HumanMessage(content=f"Question: {user_question}")
+        print(
+            f"[decompose] transform question(str) -> HumanMessage | before: {user_question[:80]!r}... | after: HumanMessage(<{len(user_question)} chars>)"
+        )
     else:
+        raw_chunks = state.get("retrieved_chunks", [])
         retrieved_chunks_str = (
             "\n\n".join(
                 f"[id={chunk['id']}] file={chunk.get('source_file') or chunk.get('headers') or '?'} | for-query={chunk['query']}\n{chunk['text'][:400]}"
@@ -124,15 +131,25 @@ def decompose_agent(state: MessageState):
             )
             or "(none)"
         )
+        print(
+            f"[decompose] transform retrieved_chunks(list) -> str | before: list(len={len(raw_chunks)}) | after: str(len={len(retrieved_chunks_str)})"
+        )
 
+        raw_queries = state.get("total_decompose_queries", [])
         prior_queries_str = (
             "\n".join(f"- {q}" for q in state.get("total_decompose_queries", []))
             or "(none)"
+        )
+        print(
+            f"[decompose] transform total_decompose_queries(list) -> str | before: {raw_queries[:2]}... (total={len(raw_queries)}) | after: str(len={len(prior_queries_str)})"
         )
 
         coverage_map = state.get("coverage_map", {}) or {}
         uncovered = [item for item, covering in coverage_map.items() if not covering]
         uncovered_str = "\n".join(f"- {item}" for item in uncovered) or "(none)"
+        print(
+            f"[decompose] transform coverage_map(dict) -> uncovered(list) | before: keys={list(coverage_map.keys())[:2]}... | after: uncovered={uncovered[:2]}... (count={len(uncovered)})"
+        )
 
         human_feedback = state.get("human_feedback", "") or "(none)"
 
@@ -146,11 +163,27 @@ def decompose_agent(state: MessageState):
         message = HumanMessage(content=context)
 
     hop_count = state.get("hop_count", 0)
+    print(
+        f"[decompose] invoking LLM ({'grounding' if is_grounding_hop else 'decomposition'} prompt)"
+    )
     result = decompose_model.invoke([sys_prompt, message])
     queries = result.queries
+    print(
+        f"[decompose] transform LLM.result -> queries | after: {queries[:3]}... (count={len(queries)})"
+    )
+    checklist = state.get("checklist", [])
     if not is_grounding_hop:
-        checklist = result.checklist if hop_count < 3 else state.get("checklist", [])
+        new_checklist = (
+            result.checklist if hop_count < 3 else state.get("checklist", [])
+        )
+        print(
+            f"[decompose] transform LLM.result -> checklist | before: {checklist[:2]}... (count={len(checklist)}) | after: {new_checklist[:2]}... (count={len(new_checklist)})"
+        )
+        checklist = new_checklist
 
+    print(
+        f"[decompose] EXIT hop={hop_count_in} queries={len(queries)} checklist={len(checklist)}"
+    )
     return {
         "current_decompose_queries": queries,
         "total_decompose_queries": queries,  # appended via operator.add

@@ -19,7 +19,7 @@ class CitationCheckOutput(BaseModel):
     )
 
 
-citation_check_model = init_chat_model("gpt-5-mini").with_structured_output(
+citation_check_model = init_chat_model("gpt-4.1-mini").with_structured_output(
     CitationCheckOutput
 )
 
@@ -89,24 +89,31 @@ def citation_check_agent(state: MessageState) -> dict:
     citations = state.get("citations", []) or []
     retrieved_chunks = state.get("retrieved_chunks", []) or []
     retry_count = state.get("citation_retry_count", 0)
+    print(f"[citation_check] ENTER citations={len(citations)} retry_count={retry_count}")
 
     # Exhausted answers carry empty citations — trivially pass
     if not citations:
+        print(f"[citation_check] EXIT citation_passed=True (empty citations, trivial pass)")
         return {"citation_passed": True}
 
     failed_claims = []
-    for cit in citations:
+    for i, cit in enumerate(citations):
         claim = cit["claim"]
         chunk_ids = cit["chunk_ids"]
+        chunks_str = _format_cited_chunks(chunk_ids, retrieved_chunks)
+        print(f"[citation_check] claim {i+1}/{len(citations)}: {claim[:80]!r}... | cited chunk_ids={chunk_ids}")
+        print(f"[citation_check] transform chunk_ids(list) + retrieved_chunks(list) -> str | before: chunk_ids={chunk_ids} pool_size={len(retrieved_chunks)} | after: str(len={len(chunks_str)})")
 
         context = (
             f"Claim:\n{claim}\n\n"
-            f"Cited chunks:\n{_format_cited_chunks(chunk_ids, retrieved_chunks)}"
+            f"Cited chunks:\n{chunks_str}"
         )
 
+        print(f"[citation_check] invoking LLM for claim {i+1}")
         result = citation_check_model.invoke(
             [CITATION_CHECK_SYS, HumanMessage(content=context)]
         )
+        print(f"[citation_check] LLM verdict: supported={result.supported} reason={result.unsupported_reason!r}")
 
         if not result.supported:
             failed_claims.append(
@@ -114,10 +121,14 @@ def citation_check_agent(state: MessageState) -> dict:
             )
 
     if not failed_claims:
+        print(f"[citation_check] EXIT citation_passed=True (all {len(citations)} claims verified)")
         return {"citation_passed": True}
+
+    print(f"[citation_check] transform failed_claims -> retry decision | before: {len(failed_claims)} failed of {len(citations)} | after: retry_count={retry_count} cap={MAX_CITATION_RETRIES}")
 
     # Failed — check retry budget
     if retry_count >= MAX_CITATION_RETRIES:
+        print(f"[citation_check] EXIT citation_passed=False (retry_cap hit, termination_reason=citation_verification_failed)")
         return {
             "citation_passed": False,
             "citation_retry_count": retry_count,
@@ -125,6 +136,7 @@ def citation_check_agent(state: MessageState) -> dict:
             "termination_reason": "citation_verification_failed",
         }
 
+    print(f"[citation_check] EXIT citation_passed=False (retry, retry_count -> {retry_count + 1})")
     return {
         "citation_passed": False,
         "citation_retry_count": retry_count + 1,

@@ -29,6 +29,7 @@ class MessageState(TypedDict):
 
     # --- searcher ---
     retrieved_chunks: Annotated[list[Chunk], operator.add]          # accumulated across hops
+    chunks_added_this_hop: int                                      # count of NEW chunks this hop (for no-progress detection)
 
     # --- coverage_check ---
     coverage_map: dict[str, list[str]]                              # checklist item -> chunk_ids covering it
@@ -36,6 +37,7 @@ class MessageState(TypedDict):
 
     # --- response ---
     answer: str
+    citations: list[dict]                                           # [{"claim": str, "chunk_ids": list[str]}]
 
     # --- citation_check ---
     citation_passed: bool
@@ -44,7 +46,7 @@ class MessageState(TypedDict):
     # --- HITL ---
     human_decision: str                                             # "approve" | "reject_no_feedback" | "reject_with_feedback"
     human_feedback: str                                             # cleared by decompose after use
-    is_found: bool                                                  # legacy flag — review if still needed
+    human_retry_count: int                                          # bumped on reject_with_feedback
 
     # --- Termination bookkeeping (set by whichever node ends the run) ---
     termination_reason: str                                         # "approved" | "exhausted" | "citation_verification_failed" | "rejected_no_feedback"

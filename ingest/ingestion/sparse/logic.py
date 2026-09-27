@@ -37,7 +37,8 @@ print("ts files:",ts_files)
 
 for index,ts_file in enumerate(ts_files):
     text = ts_file.read_text(encoding="utf-8")
-    nodes = code_splitter.get_nodes_from_documents([Document(text=text)])
+    rel_path = str(ts_file.relative_to(backstage_dir)).replace("\\", "/")
+    nodes = code_splitter.get_nodes_from_documents([Document(text=text, metadata={"source_file": rel_path})])
     code_documents.extend(nodes)
     print("Chunks:",index,nodes)
 
@@ -51,13 +52,13 @@ quadrant_client = QdrantClient(url="https://e83b0b74-3a98-4cdd-85f0-5cbb042fdfed
 
 # creating a sparse-only collection
 
-# quadrant_client.create_collection(
-#     collection_name="sparse_logic",
-#     vectors_config={},
-#     sparse_vectors_config={
-#         "sparse": models.SparseVectorParams()
-#     }
-# )
+quadrant_client.create_collection(
+    collection_name="sparse_logic",
+    vectors_config={},
+    sparse_vectors_config={
+        "sparse": models.SparseVectorParams()
+    }
+)
 
 
 # initializing sparse embedding model
@@ -65,7 +66,7 @@ sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
 
 
 # converting chunks to sparse embeddings
-texts = [chunk.text for chunk in code_documents]
+texts = [chunk.text for chunk in code_documents]  # CodeSplitter nodes expose .text (NOT .page_content)
 sparse_embeddings = list(sparse_model.embed(texts))
 
 # BATCH_SIZE = 400

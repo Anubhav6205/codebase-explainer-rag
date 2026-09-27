@@ -1,0 +1,78 @@
+name: Eval Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      QDRANT_URL: ${{ secrets.QDRANT_URL }}
+      QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+      EVAL_MODE: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pipeline eval
+        run: python evals/pipeline_eval.py
+
+      - name: Check quality thresholds
+        run: |
+          python - <<'EOF'
+          import json, glob, sys, os
+
+          jobs = sorted(glob.glob("evals/jobs/pipeline_eval_*.json"))
+          if not jobs:
+              print("No eval job file found")
+              sys.exit(1)
+
+          with open(jobs[-1]) as f:
+              d = json.load(f)
+
+          summary = d["summary"]
+          ragas = d.get("ragas_aggregate", {})
+          false_confidence_rate = summary["false_confidence_rate"]
+          context_recall = ragas.get("context_recall", 0)
+          faithfulness = ragas.get("faithfulness", 0)
+
+          print(f"false_confidence_rate : {false_confidence_rate:.3f}  (threshold <= 0.50)")
+          print(f"context_recall        : {context_recall:.3f}  (threshold >= 0.80)")
+          print(f"faithfulness          : {faithfulness:.3f}  (threshold >= 0.60)")
+
+          failed = []
+          if false_confidence_rate > 0.50:
+              failed.append(f"false_confidence_rate {false_confidence_rate:.3f} > 0.50")
+          if context_recall < 0.80:
+              failed.append(f"context_recall {context_recall:.3f} < 0.80")
+          if faithfulness < 0.60:
+              failed.append(f"faithfulness {faithfulness:.3f} < 0.60")
+
+          if failed:
+              print("\nFAILED thresholds:")
+              for f in failed:
+                  print(f"  - {f}")
+              sys.exit(1)
+
+          print("\nAll thresholds passed.")
+          EOF
+
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: evals/jobs/pipeline_eval_*.json

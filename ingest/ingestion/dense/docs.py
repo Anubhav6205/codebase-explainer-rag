@@ -33,6 +33,9 @@ print("md files:",md_files)
 for index,md_file in enumerate(md_files):
     text = Path.read_text(md_file,encoding="utf-8")
     chunks = markdown_splitter.split_text(text)
+    rel_path = str(md_file.relative_to(backstage_dir)).replace("\\", "/")
+    for chunk in chunks:
+        chunk.metadata["source_file"] = rel_path
     markdown_documents.extend(chunks)
     print("Chunks:",index,chunks)
 

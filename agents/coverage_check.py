@@ -1,6 +1,6 @@
 from langchain.messages import HumanMessage, SystemMessage
 from langchain.chat_models import init_chat_model
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 import sys, os
 
@@ -13,9 +13,17 @@ class CoverageCheckOutput(BaseModel):
         description="For each checklist item (verbatim key), the list of chunk ids that substantively cover it. Empty list if none."
     )
 
+    @field_validator("coverage_mapping", mode="before")
+    @classmethod
+    def coerce_ids_to_str(cls, v):
+        if isinstance(v, dict):
+            return {k: [str(i) for i in vals] for k, vals in v.items()}
+        return v
 
-coverage_check_model = init_chat_model("gpt-5-mini").with_structured_output(
-    CoverageCheckOutput
+
+coverage_check_model = init_chat_model("gpt-4.1-mini").with_structured_output(
+    CoverageCheckOutput,
+    method="function_calling",
 )
 
 
@@ -61,6 +69,12 @@ that ruins the entire system.
    `coverage_mapping`, verbatim. Do not add keys that were not in the checklist.
    Do not omit keys.
 
+7. NON-EXISTENCE signal. If the checklist item asks about a specific named
+   class, function, or constant and that exact name does not appear verbatim
+   in ANY chunk in the pool, that item CANNOT be covered — do not substitute
+   a topically similar class or a class with a similar name. An empty list
+   is the correct output in this case.
+
 Return only the `coverage_mapping` field.
 """)
 
@@ -84,30 +98,42 @@ def coverage_check_agent(state: MessageState) -> dict:
     checklist = state.get("checklist", []) or []
     retrieved_chunks = state.get("retrieved_chunks", []) or []
     question = state.get("question", "")
+    print(f"[coverage_check] ENTER checklist_items={len(checklist)} chunks_in_pool={len(retrieved_chunks)}")
 
     # Hop 1 has no real checklist yet — force loop back
     if not checklist:
+        print(f"[coverage_check] EXIT is_sufficient=False (empty checklist, hop 1 short-circuit)")
         return {
             "coverage_map": {},
             "is_sufficient": False,
         }
 
+    checklist_str = _format_checklist(checklist)
+    chunks_str = _format_chunks(retrieved_chunks)
+    print(f"[coverage_check] transform checklist(list) -> str | before: {checklist[:1]}... (count={len(checklist)}) | after: str(len={len(checklist_str)})")
+    print(f"[coverage_check] transform retrieved_chunks(list) -> str | before: list(len={len(retrieved_chunks)}) | after: str(len={len(chunks_str)})")
+
     context = (
         f"Original question:\n{question}\n\n"
-        f"Checklist (each item must be covered):\n{_format_checklist(checklist)}\n\n"
-        f"Retrieved chunk pool:\n{_format_chunks(retrieved_chunks)}"
+        f"Checklist (each item must be covered):\n{checklist_str}\n\n"
+        f"Retrieved chunk pool:\n{chunks_str}"
     )
 
+    print(f"[coverage_check] invoking LLM")
     result = coverage_check_model.invoke(
         [COVERAGE_CHECK_SYS, HumanMessage(content=context)]
     )
 
     coverage_map = result.coverage_mapping
+    print(f"[coverage_check] transform LLM.result -> coverage_mapping(dict) | after: keys_returned={len(coverage_map)} (expected={len(checklist)})")
 
     # Guard: model may drop/rename keys — reconcile against the true checklist
     reconciled = {item: coverage_map.get(item, []) for item in checklist}
+    covered_count = sum(1 for v in reconciled.values() if v)
+    print(f"[coverage_check] transform coverage_map -> reconciled | before: {len(coverage_map)} keys | after: {len(reconciled)} keys ({covered_count} covered, {len(reconciled) - covered_count} uncovered)")
 
     is_sufficient = all(bool(v) for v in reconciled.values())
+    print(f"[coverage_check] EXIT is_sufficient={is_sufficient}")
 
     return {
         "coverage_map": reconciled,
