@@ -45,7 +45,7 @@ for index,ts_file in enumerate(ts_files):
 
 
 qdrant_secret = os.getenv("QDRANT_API_KEY")
-quadrant_client = QdrantClient(url="https://e83b0b74-3a98-4cdd-85f0-5cbb042fdfed.us-east-1-1.aws.cloud.qdrant.io",
+quadrant_client = QdrantClient(url=os.getenv("QDRANT_URL"),
                       api_key=qdrant_secret)
 
 
