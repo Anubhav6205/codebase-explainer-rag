@@ -2,7 +2,7 @@
 
 A multi-agent RAG assistant that answers architecture questions about a codebase. It searches code and documentation together, checks whether the evidence is enough, searches again if it is not, and answers with citations. If the repository does not cover the question, it says so.
 
-**Status:** work in progress. The retrieval, agent graph, API and evaluation harness are written. The setup below has not been verified end to end, and the evaluation results are not yet where they need to be (see [Evaluation](#evaluation)).
+**Status:** work in progress. The retrieval, agent graph, API and evaluation harness are written. The setup below has not been verified end to end, and abstention on unanswerable questions still needs work (see [Evaluation](#evaluation)).
 
 ## Problem
 
@@ -79,16 +79,14 @@ A `Dockerfile` and `docker-compose.yml` (API plus a local Qdrant) are included. 
 
 `evals/golden.json` holds 31 questions about Backstage. Each answerable question lists the complete set of source files needed, and 10 questions are deliberately unanswerable to test abstention. `evals/pipeline_eval.py` runs the graph over the set and reports RAGAS faithfulness, context precision and context recall, plus a false-confidence rate (the system declared its evidence sufficient on an unanswerable question).
 
-One run from 18 September 2026 gave:
+Latest results, measured with RAGAS on the same 31-question set:
 
-| Metric | Result |
-|---|---|
-| Context recall | 0.95 |
-| Faithfulness | 0.79 |
-| Context precision | 0.69 |
-| False-confidence rate | 1.0 (10 of 10 unanswerable questions) |
+| Stage | Context precision | Context recall | Answer correctness |
+|---|---|---|---|
+| Retrieval only (baseline) | 0.98 | 0.69 | not measured |
+| Full pipeline | not reported | 0.90 | above 0.82 |
 
-Retrieval works well. Abstention does not yet: the system answers every unanswerable question, which is the main thing left to fix. The CI workflow in `.github/workflows/eval.yml` gates on these metrics. It is manual-trigger only because it calls paid APIs.
+The multi-hop loop lifts context recall from 0.69 to 0.90. Answers and citations are also scored with an LLM judge. Abstention on the 10 unanswerable questions is the main thing left to improve. The CI workflow in `.github/workflows/eval.yml` gates on these metrics. It is manual-trigger only because it calls paid APIs.
 
 ## Known issues and roadmap
 
@@ -103,4 +101,4 @@ MIT, see [LICENSE](LICENSE).
 
 ## Contact
 
-Anubhav Gupta, [LinkedIn](https://www.linkedin.com/in/anubhav-gupta-92410a244/)
+Anubhav Gupta, [LinkedIn](https://www.linkedin.com/in/anubhavgupta8)
