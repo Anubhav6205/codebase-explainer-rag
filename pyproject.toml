@@ -1,23 +1,31 @@
 [project]
-name="capstone_1"
-version="1.0.0"
-description="Search for anything around the codebase"
-authors=[{name="Anubhav", email="anubhavgupta@test.com"}]
-dependencies= [
-"qdrant-client",
-"voyageai",
-"llama-index-core",
-"fastembed",
- "langchain".
- "langchain_openai",
- "langgraph"
- "arize-phoenix","arize-phoenix-otel","openinference-instrumentation-langchain",
-
-"sentence-transformers",
+name = "codebase-explainer-rag"
+version = "0.1.0"
+description = "Multi-agent RAG assistant that answers architecture questions about a codebase, with citations and abstention"
+requires-python = ">=3.11"
+dependencies = [
+    "qdrant-client",
+    "voyageai",
+    "llama-index-core",
+    "fastembed",
+    "langchain",
+    "langchain-openai",
+    "langchain-core",
+    "langchain-text-splitters",
+    "langgraph",
+    "fastapi",
+    "uvicorn",
+    "python-dotenv",
+    "pydantic",
+    "ragas",
+    "datasets",
+    "arize-phoenix",
+    "arize-phoenix-otel",
+    "openinference-instrumentation-langchain",
+    "sentence-transformers",
     "tree-sitter",
-    "tree-sitter-language-pack"]
-
-
+    "tree-sitter-language-pack",
+]
 
 [tool.setuptools]
 packages = []
