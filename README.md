@@ -2,6 +2,8 @@
 
 A multi-agent RAG assistant that answers architecture questions about a codebase. It searches code and documentation together, checks whether the evidence is enough, searches again if it is not, and answers with citations. If the repository does not cover the question, it says so.
 
+**Live demo:** [codebase-explainer-rag.vercel.app](https://codebase-explainer-rag.vercel.app) is a project page with the pipeline diagram, evaluation results and the 31-question evaluation set. It is not the running app, which needs a Qdrant index and OpenAI and Voyage API keys.
+
 **Status:** work in progress. The retrieval, agent graph, API and evaluation harness are written. The setup below has not been verified end to end, and abstention on unanswerable questions still needs work (see [Evaluation](#evaluation)).
 
 ## Problem
